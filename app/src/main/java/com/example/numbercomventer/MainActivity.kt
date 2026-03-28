@@ -14,7 +14,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -25,20 +24,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
 
-val blackText = Color(0xFF000000)
-val appBgColor = Color(0xFF0E1B1E)
-val cardBgColor = Color(0xFF1E343C)
-val brightGreen = Color(0xFF2EF600)
-val lightGreen = Color(0xFF9AFF80)
-val paleGreen = Color(0xFFD6FDCA)
-val whiteText = Color(0xFFFDFDFD)
+val appBgColor = Color(0xFF0A0A0A)
+val brightGreen = Color(0xFF00FF41)
+val mutedGreen = Color(0xFF1A4D1A)
+val errorRed = Color(0xFFFF3333)
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 class MainActivity : ComponentActivity() {
@@ -62,89 +62,137 @@ enum class NumberType(val displayName: String) {
     DECIMAL("DECIMAL"),
     HEXADECIMAL("HEXADECIMAL")
 }
+sealed class ConversionState {
+    object Empty : ConversionState()
+    data class Success(val value: String) : ConversionState()
+    data class Error(val message: String) : ConversionState()
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NumberConverterApp() {
     val keyboardController = LocalSoftwareKeyboardController.current
-
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
     var inputNumber by remember { mutableStateOf("") }
     var fromType by remember { mutableStateOf(NumberType.DECIMAL) }
     var toType by remember { mutableStateOf(NumberType.BINARY) }
-    var resultText by remember { mutableStateOf("The result will appear here") }
+    var conversionResult by remember { mutableStateOf<ConversionState>(ConversionState.Empty) }
+
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(inputNumber) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    // Real-time conversion
+    LaunchedEffect(inputNumber, fromType, toType) {
+        if (inputNumber.isNotEmpty()) {
+            conversionResult = convertNumber(inputNumber, fromType, toType)
+        } else {
+            conversionResult = ConversionState.Empty
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(appBgColor)
-            .padding(top = 40.dp, bottom = 16.dp),
+            .systemBarsPadding()
+            .padding(bottom = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // TOP AD BANNER
         AdBanner()
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // MAIN CARD
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = cardBgColor),
+                .weight(1f),
+            shape = RoundedCornerShape(2.dp),
+            colors = CardDefaults.cardColors(containerColor = appBgColor),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "Number Converter",
-                    fontSize = 22.sp,
-                    color = whiteText,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                // Determine if the current text breaks the rules
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Text(
+                        text = "> NUMBER_CONVERTER",
+                        fontSize = 20.sp,
+                        color = brightGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
+
                 val isInputError = !isValidForType(inputNumber, fromType)
 
-                // BULLETPROOF INPUT DISPLAY with Long-Press Paste
+                // BULLETPROOF INPUT DISPLAY
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
-                        .clip(RoundedCornerShape(8.dp)) // Ripple stays in bounds
-                        .background(whiteText)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.Transparent)
+                        .border(1.dp, if (isInputError) errorRed else brightGreen, RoundedCornerShape(2.dp))
                         .combinedClickable(
                             onClick = { /* Do nothing on short tap */ },
                             onLongClick = {
                                 val clipboardText = clipboardManager.getText()?.text
                                 if (!clipboardText.isNullOrBlank()) {
                                     inputNumber = clipboardText
-                                    resultText = "Enter a number to convert" // Reset result on paste
                                     android.widget.Toast.makeText(context, "Pasted!", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 8.dp), // Reduced slightly to make room for arrows
                     contentAlignment = Alignment.CenterStart
                 ) {
-                    if (inputNumber.isEmpty()) {
-                        Text("Enter number...", color = Color.Gray, fontSize = 16.sp)
-                    } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // LEFT SCROLL INDICATOR
+                        if (scrollState.value > 0) {
+                            Text("< ", color = mutedGreen, fontFamily = FontFamily.Monospace, fontSize = 16.sp)
+                        } else {
+                            Spacer(modifier = Modifier.width(16.dp)) // Keeps text from jumping around
+                        }
+
+                        // ACTUAL TEXT
                         Text(
-                            text = inputNumber,
-                            color = if (isInputError) Color.Red else blackText,
+                            text = if (inputNumber.isEmpty()) "_" else inputNumber,
+                            color = if (isInputError) errorRed else brightGreen,
+                            fontFamily = FontFamily.Monospace,
                             fontSize = 16.sp,
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1f) // Takes up remaining space between arrows
+                                .horizontalScroll(scrollState)
                         )
+
+                        // RIGHT SCROLL INDICATOR
+                        if (scrollState.value < scrollState.maxValue) {
+                            Text(" >", color = mutedGreen, fontFamily = FontFamily.Monospace, fontSize = 16.sp)
+                        } else {
+                            Spacer(modifier = Modifier.width(16.dp))
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // FROM / TO HEADERS
                 Row(
@@ -153,15 +201,15 @@ fun NumberConverterApp() {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Spacer(Modifier.weight(0.05f))
-                    Text("FROM", color = whiteText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("FROM", color = brightGreen, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     Spacer(Modifier.weight(1f))
-                    Icon(Icons.Default.SwapHoriz, contentDescription = "Swap", tint = whiteText)
+                    Icon(Icons.Default.SwapHoriz, contentDescription = "Swap", tint = brightGreen)
                     Spacer(Modifier.weight(1f))
-                    Text("TO", color = whiteText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("TO", color = brightGreen, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     Spacer(Modifier.weight(0.15f))
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // SELECTION ROWS
                 NumberType.entries.forEach { type ->
@@ -170,133 +218,109 @@ fun NumberConverterApp() {
                         isFrom = (fromType == type),
                         isTo = (toType == type),
                         onFromClick = {
-                            // Only clear things if they are actually picking a *different* type
                             if (fromType != type) {
-
-                                // Swap logic if they pick the one currently in "TO"
                                 if (toType == type) toType = fromType
-
                                 fromType = type
-                                inputNumber = "" // <--- CLEARS THE INPUT FIELD
-                                resultText = "Enter a number to convert" // <--- RESETS THE RESULT BOX
+                                inputNumber = ""
                             }
-
-                            // Hide system keyboard if switching to ANY custom keyboard
-                            if (type != NumberType.DECIMAL) {
-                                keyboardController?.hide()
-                            }
+                            if (type != NumberType.DECIMAL) keyboardController?.hide()
                         },
                         onToClick = {
-                            // If they click the one that is currently "FROM", swap them
-                            if (fromType == type) {
-                                fromType = toType
-                            }
+                            if (fromType == type) fromType = toType
                             toType = type
-                            resultText = "Enter a number to convert"
-                        },
-                        highlightColor = paleGreen,
-                        lightGreen = lightGreen,
-                        cardBgColor = cardBgColor,
-                        whiteText = whiteText
+                        }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // RESULT BOX
+                // RESULT BOX (Terminal Style)
+                // RESULT BOX (Terminal Style)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp)) // Clips the ripple effect to the rounded corners
-                        .background(lightGreen)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color.Transparent)
+                        .border(1.dp, brightGreen, RoundedCornerShape(2.dp))
                         .clickable {
-                            // Only copy if it's an actual result, not the placeholder text or an error
-                            if (!resultText.contains("Enter") && !resultText.contains("Invalid")) {
-                                clipboardManager.setText(AnnotatedString(resultText))
-                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                            // Only copy if it's a success!
+                            if (conversionResult is ConversionState.Success) {
+                                val textToCopy = (conversionResult as ConversionState.Success).value
+                                clipboardManager.setText(AnnotatedString(textToCopy))
+                                Toast.makeText(context, "Data copied.", Toast.LENGTH_SHORT).show()
                             }
                         }
                         .padding(16.dp)
                 ) {
                     Column {
-                        Text("RESULT", fontSize = 12.sp, color = cardBgColor, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = resultText,
-                            fontSize = 16.sp,
-                            color = cardBgColor,
-                            fontStyle = if (resultText.contains("Enter")) FontStyle.Italic else FontStyle.Normal
-                        )
+                        when (val state = conversionResult) {
+                            is ConversionState.Empty -> {
+                                Text(
+                                    text = "Awaiting input...",
+                                    fontSize = 16.sp,
+                                    color = mutedGreen, // Make empty state look dim
+                                    fontFamily = FontFamily.Monospace,
+                                    fontStyle = FontStyle.Italic
+                                )
+                            }
+                            is ConversionState.Error -> {
+                                Text(
+                                    text = state.message,
+                                    fontSize = 16.sp,
+                                    color = errorRed, // Make errors flash red!
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            is ConversionState.Success -> {
+                                Text(
+                                    text = state.value,
+                                    fontSize = 16.sp,
+                                    color = brightGreen, // Valid math is terminal green
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // CONVERT BUTTON
-                Button(
-                    onClick = {
-                        keyboardController?.hide()
-                        resultText = convertNumber(inputNumber, fromType, toType)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = brightGreen)
-                ) {
-                    Text("Convert", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = blackText)
-                }
                 // --- CUSTOM KEYBOARDS ---
-                val keyboardBg = Color(0xFF0E1B1E) // Palette app background color
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(240.dp), // Locks the area to the height of the 4-row Decimal keyboard
-                    contentAlignment = Alignment.BottomCenter // Anchors shorter keyboards to the bottom
+                        .weight(1f),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
                     when (fromType) {
-                        NumberType.ROMAN -> {
-                            RomanKeyboard(
-                                onKeyPressed = { inputNumber += it },
-                                onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
-                                cardBgColor = keyboardBg,
-                                lightGreen = lightGreen
-                            )
-                        }
-                        NumberType.HEXADECIMAL -> {
-                            HexadecimalKeyboard(
-                                onKeyPressed = { inputNumber += it },
-                                onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
-                                cardBgColor = keyboardBg,
-                                lightGreen = lightGreen
-                            )
-                        }
-                        NumberType.BINARY -> {
-                            BinaryKeyboard(
-                                onKeyPressed = { inputNumber += it },
-                                onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
-                                cardBgColor = keyboardBg,
-                                lightGreen = lightGreen
-                            )
-                        }
-                        NumberType.OCTAL -> {
-                            OctalKeyboard(
-                                onKeyPressed = { inputNumber += it },
-                                onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
-                                cardBgColor = keyboardBg,
-                                lightGreen = lightGreen
-                            )
-                        }
-                        NumberType.DECIMAL -> {
-                            DecimalKeyboard(
-                                onKeyPressed = { inputNumber += it },
-                                onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
-                                cardBgColor = keyboardBg,
-                                lightGreen = lightGreen
-                            )
-                        }
+                        NumberType.ROMAN -> RomanKeyboard(
+                            onKeyPressed = { if (inputNumber.length < 15) inputNumber += it },
+                            onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
+                            onClear = { inputNumber = "" } // <-- Added Clear logic!
+                        )
+                        NumberType.HEXADECIMAL -> HexadecimalKeyboard(
+                            onKeyPressed = { if (inputNumber.length < 15) inputNumber += it },
+                            onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
+                            onClear = { inputNumber = "" }
+                        )
+                        NumberType.BINARY -> BinaryKeyboard(
+                            onKeyPressed = { if (inputNumber.length < 62) inputNumber += it },
+                            onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
+                            onClear = { inputNumber = "" }
+                        )
+                        NumberType.OCTAL -> OctalKeyboard(
+                            onKeyPressed = { if (inputNumber.length < 21) inputNumber += it },
+                            onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
+                            onClear = { inputNumber = "" }
+                        )
+                        NumberType.DECIMAL -> DecimalKeyboard(
+                            onKeyPressed = { if (inputNumber.length < 18) inputNumber += it },
+                            onBackspace = { if (inputNumber.isNotEmpty()) inputNumber = inputNumber.dropLast(1) },
+                            onClear = { inputNumber = "" }
+                        )
                     }
                 }
             }
@@ -310,11 +334,7 @@ fun SelectionRow(
     isFrom: Boolean,
     isTo: Boolean,
     onFromClick: () -> Unit,
-    onToClick: () -> Unit,
-    highlightColor: Color,
-    lightGreen: Color,
-    cardBgColor: Color,
-    whiteText: Color
+    onToClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -322,14 +342,14 @@ fun SelectionRow(
             .height(32.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Highlight Pills (Drawn behind the content)
+        // Highlight Pills - Changed to sharp rectangles for terminal look
         if (isFrom) {
             Row(
                 Modifier
                     .fillMaxWidth(0.68f)
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .background(whiteText, CircleShape)
+                    .background(mutedGreen, RoundedCornerShape(2.dp))
             ) {}
         } else if (isTo) {
             Row(
@@ -337,17 +357,15 @@ fun SelectionRow(
                     .fillMaxWidth(0.68f)
                     .align(Alignment.CenterEnd)
                     .fillMaxHeight()
-                    .background(lightGreen, CircleShape)
+                    .background(mutedGreen, RoundedCornerShape(2.dp))
             ) {}
         }
 
-        // Foreground Content
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Radio Button Area
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -356,20 +374,19 @@ fun SelectionRow(
                     .padding(start = 16.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                CustomRadioButton(selected = isFrom, radioColor = if (isFrom) cardBgColor else highlightColor)
+                CustomRadioButton(selected = isFrom)
             }
 
-            // Center Text
             Text(
                 text = type.displayName,
-                color = if (isFrom || isTo) cardBgColor else Color(0xFFFDFDFD),
+                color = brightGreen,
+                fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
 
-            // Right Radio Button Area
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -378,34 +395,30 @@ fun SelectionRow(
                     .padding(end = 16.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                CustomRadioButton(selected = isTo, radioColor = if (isTo) cardBgColor else highlightColor)
+                CustomRadioButton(selected = isTo)
             }
         }
     }
 }
 
 @Composable
-fun CustomRadioButton(selected: Boolean, radioColor: Color) {
+fun CustomRadioButton(selected: Boolean) {
     Box(
         modifier = Modifier
             .size(16.dp)
-            .background(radioColor, CircleShape)
-            .border(2.dp, radioColor, CircleShape)
+            .background(if (selected) brightGreen else Color.Transparent, RoundedCornerShape(2.dp))
+            .border(1.dp, brightGreen, RoundedCornerShape(2.dp))
     )
 }
+
 @Composable
 fun AdBanner(modifier: Modifier = Modifier) {
-    val mainPurple = brightGreen
-    val inputBg = paleGreen
-    val labelGrey = cardBgColor
-    val white = whiteText
-    val lightGreyBorder = paleGreen
-
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(50.dp)
-            .background(lightGreyBorder),
+            .background(appBgColor)
+            .border(1.dp, mutedGreen),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -417,32 +430,32 @@ fun AdBanner(modifier: Modifier = Modifier) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(labelGrey),
+                    .clip(RoundedCornerShape(2.dp))
+                    .border(1.dp, brightGreen, RoundedCornerShape(2.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = "AD", color = white, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text(text = "AD", color = brightGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
             }
 
             Spacer(Modifier.width(12.dp))
 
-            //AD TEXT SECTION
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Unlock Historical Date Math!",
+                    text = "SYS_UPDATE_AVAILABLE",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
+                    fontFamily = FontFamily.Monospace,
+                    color = brightGreen,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Find exact BC/AD dates with 100% precision. Get the best Date Calculator on Android!",
+                    text = "Download latest utility packages...",
                     fontSize = 10.sp,
-                    color = labelGrey,
+                    fontFamily = FontFamily.Monospace,
+                    color = mutedGreen,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -450,20 +463,20 @@ fun AdBanner(modifier: Modifier = Modifier) {
 
             Spacer(Modifier.width(12.dp))
 
-            Button(
-                onClick = { /* Simulation: No Action */ },
-                colors = ButtonDefaults.buttonColors(containerColor = mainPurple),
-                shape = RoundedCornerShape(8.dp),
+            Box(
                 modifier = Modifier
                     .wrapContentSize()
-                    .height(30.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    .height(30.dp)
+                    .border(1.dp, brightGreen, RoundedCornerShape(2.dp))
+                    .clickable { /* Action */ }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "FREE INSTALL",
+                    text = "EXECUTE",
+                    fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = labelGrey
+                    color = brightGreen
                 )
             }
         }
@@ -471,11 +484,10 @@ fun AdBanner(modifier: Modifier = Modifier) {
 }
 
 // --- CONVERSION LOGIC ---
-
-fun convertNumber(input: String, from: NumberType, to: NumberType): String {
+fun convertNumber(input: String, from: NumberType, to: NumberType): ConversionState {
     val cleanInput = input.trim()
-    if (cleanInput.isBlank()) return "Please enter a valid number"
-    if (from == to) return cleanInput
+    if (cleanInput.isBlank()) return ConversionState.Empty
+    if (from == to) return ConversionState.Success(cleanInput)
 
     return try {
         val decimalValue: Long = when (from) {
@@ -487,20 +499,17 @@ fun convertNumber(input: String, from: NumberType, to: NumberType): String {
         }
 
         when (to) {
-            NumberType.DECIMAL -> decimalValue.toString()
-            NumberType.BINARY -> decimalValue.toString(2).uppercase()
-            NumberType.OCTAL -> decimalValue.toString(8).uppercase()
-            NumberType.HEXADECIMAL -> decimalValue.toString(16).uppercase()
+            NumberType.DECIMAL -> ConversionState.Success(decimalValue.toString())
+            NumberType.BINARY -> ConversionState.Success(decimalValue.toString(2).uppercase())
+            NumberType.OCTAL -> ConversionState.Success(decimalValue.toString(8).uppercase())
+            NumberType.HEXADECIMAL -> ConversionState.Success(decimalValue.toString(16).uppercase())
             NumberType.ROMAN -> {
-                if (decimalValue in 1..3999) {
-                    intToRoman(decimalValue.toInt())
-                } else {
-                    "Roman numerals must be between 1 and 3999"
-                }
+                if (decimalValue in 1..3999) ConversionState.Success(intToRoman(decimalValue.toInt()))
+                else ConversionState.Error("ERR: ROMAN_LIMIT (1-3999)")
             }
         }
     } catch (e: Exception) {
-        "Invalid input for selected base"
+        ConversionState.Error("ERR: INVALID_BASE")
     }
 }
 
@@ -510,12 +519,8 @@ fun romanToInt(s: String): Int {
     var prevValue = 0
 
     for (i in s.indices.reversed()) {
-        val currentValue = romanMap[s[i]] ?: throw IllegalArgumentException("Invalid Roman character")
-        if (currentValue < prevValue) {
-            result -= currentValue
-        } else {
-            result += currentValue
-        }
+        val currentValue = romanMap[s[i]] ?: throw IllegalArgumentException("Invalid Roman")
+        if (currentValue < prevValue) result -= currentValue else result += currentValue
         prevValue = currentValue
     }
     return result
@@ -535,300 +540,132 @@ fun intToRoman(num: Int): String {
     }
     return sb.toString()
 }
-@Composable
-fun RomanKeyboard(
-    onKeyPressed: (String) -> Unit,
-    onBackspace: () -> Unit,
-    cardBgColor: Color,
-    lightGreen: Color
-) {
-    val row1 = listOf("I", "V", "X", "L")
-    val row2 = listOf("C", "D", "M", "⌫")
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // First Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            row1.forEach { key ->
-                KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-            }
-        }
-        // Second Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            row2.forEach { key ->
-                if (key == "⌫") {
-                    KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onBackspace() }
-                } else {
-                    KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-                }
-            }
-        }
-    }
-}
+// --- KEYBOARDS ---
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun KeyboardButton(
     text: String,
     modifier: Modifier,
-    bgColor: Color,
-    textColor: Color,
-    height: Dp = 48.dp, // Default height, easily overridden for tall buttons
-    onClick: () -> Unit
+    height: Dp = 48.dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {} // Added default empty action so normal keys don't break
 ) {
     Box(
         modifier = modifier
             .height(height)
-            .clip(RoundedCornerShape(8.dp))
-            .background(bgColor)
-            .clickable { onClick() },
+            .clip(RoundedCornerShape(2.dp))
+            .background(Color.Transparent)
+            .border(1.dp, brightGreen, RoundedCornerShape(2.dp))
+            .combinedClickable( // Swapped clickable for combinedClickable
+                onClick = { onClick() },
+                onLongClick = { onLongClick() }
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = text,
+            color = brightGreen,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 20.sp
+        )
     }
 }
+
 @Composable
-fun DecimalKeyboard(
-    onKeyPressed: (String) -> Unit,
-    onBackspace: () -> Unit,
-    cardBgColor: Color,
-    lightGreen: Color
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // TOP SECTION: Numbers & Tall Backspace
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // Left Side: 2 Rows of Numbers (Weight 3 to match bottom row grid)
-            Column(
-                modifier = Modifier.weight(3f), // <--- CHANGED FROM 5f TO 3f
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("0", "1", "2").forEach { key ->
-                        KeyboardButton(
-                            key,
-                            Modifier.weight(1f),
-                            cardBgColor,
-                            lightGreen
-                        ) { onKeyPressed(key) }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("3", "4", "5").forEach { key ->
-                        KeyboardButton(
-                            key,
-                            Modifier.weight(1f),
-                            cardBgColor,
-                            lightGreen
-                        ) { onKeyPressed(key) }
-                    }
-                }
-            }
-
-            // Right Side: Tall Backspace (Weight 1)
-            KeyboardButton(
-                text = "⌫",
-                modifier = Modifier.weight(1f),
-                bgColor = cardBgColor,
-                textColor = lightGreen,
-                height = 100.dp // 48dp (row 1) + 48dp (row 2) + 4dp (spacing)
-            ) { onBackspace() }
+fun RomanKeyboard(onKeyPressed: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit) {
+    val row1 = listOf("I", "V", "X", "L")
+    val row2 = listOf("C", "D", "M", "⌫")
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            row1.forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
         }
-
-        // BOTTOM SECTION: 4 equal buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf("6", "7", "8", "9" ).forEach { key ->
-                KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-            }
-        }
-    }
-}
-@Composable
-fun HexadecimalKeyboard(
-    onKeyPressed: (String) -> Unit,
-    onBackspace: () -> Unit,
-    cardBgColor: Color,
-    lightGreen: Color
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // TOP SECTION: Numbers & Tall Backspace
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            // Left Side: 2 Rows of Numbers (Weight 5 out of 6)
-            Column(
-                modifier = Modifier.weight(5f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("0", "1", "2", "3", "4").forEach { key ->
-                        KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    listOf("5", "6", "7", "8", "9").forEach { key ->
-                        KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-                    }
-                }
-            }
-
-            // Right Side: Tall Backspace (Weight 1 out of 6)
-            KeyboardButton(
-                text = "⌫",
-                modifier = Modifier.weight(1f),
-                bgColor = cardBgColor,
-                textColor = lightGreen,
-                height = 100.dp // 48dp (row 1) + 48dp (row 2) + 8dp (spacing)
-            ) { onBackspace() }
-        }
-
-        // BOTTOM SECTION: Letters A-F
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf("A", "B", "C", "D", "E", "F").forEach { key ->
-                KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            row2.forEach { key ->
+                if (key == "⌫") KeyboardButton(key, Modifier.weight(1f), onClick = { onBackspace() }, onLongClick = { onClear() })
+                else KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) })
             }
         }
     }
 }
 
 @Composable
-fun BinaryKeyboard(
-    onKeyPressed: (String) -> Unit,
-    onBackspace: () -> Unit,
-    cardBgColor: Color,
-    lightGreen: Color
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        // Top Row: 0 and 1
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            KeyboardButton("0", Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed("0") }
-            KeyboardButton("1", Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed("1") }
+fun DecimalKeyboard(onKeyPressed: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(3f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("0", "1", "2").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("3", "4", "5").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
+                }
+            }
+            KeyboardButton(text = "⌫", modifier = Modifier.weight(1f), height = 100.dp, onClick = { onBackspace() }, onLongClick = { onClear() })
         }
-        // Bottom Row: Full-width Backspace
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            KeyboardButton("⌫", Modifier.weight(1f), cardBgColor, lightGreen) { onBackspace() }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("6", "7", "8", "9").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
         }
     }
 }
 
 @Composable
-fun OctalKeyboard(
-    onKeyPressed: (String) -> Unit,
-    onBackspace: () -> Unit,
-    cardBgColor: Color,
-    lightGreen: Color
-) {
-    val rows = listOf(
-        listOf("0", "1", "2"),
-        listOf("3", "4", "5"),
-        listOf("6", "7", "⌫")
-    )
+fun HexadecimalKeyboard(onKeyPressed: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(5f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("0", "1", "2", "3", "4").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("5", "6", "7", "8", "9").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
+                }
+            }
+            KeyboardButton(text = "⌫", modifier = Modifier.weight(1f), height = 100.dp, onClick = { onBackspace() }, onLongClick = { onClear() })
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("A", "B", "C", "D", "E", "F").forEach { key -> KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) }) }
+        }
+    }
+}
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
+@Composable
+fun BinaryKeyboard(onKeyPressed: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            KeyboardButton("0", Modifier.weight(1f), onClick = { onKeyPressed("0") })
+            KeyboardButton("1", Modifier.weight(1f), onClick = { onKeyPressed("1") })
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            KeyboardButton("⌫", Modifier.weight(1f), onClick = { onBackspace() }, onLongClick = { onClear() })
+        }
+    }
+}
+
+@Composable
+fun OctalKeyboard(onKeyPressed: (String) -> Unit, onBackspace: () -> Unit, onClear: () -> Unit) {
+    val rows = listOf(listOf("0", "1", "2"), listOf("3", "4", "5"), listOf("6", "7", "⌫"))
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         rows.forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 row.forEach { key ->
-                    if (key == "⌫") {
-                        KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onBackspace() }
-                    } else {
-                        KeyboardButton(key, Modifier.weight(1f), cardBgColor, lightGreen) { onKeyPressed(key) }
-                    }
+                    if (key == "⌫") KeyboardButton(key, Modifier.weight(1f), onClick = { onBackspace() }, onLongClick = { onClear() })
+                    else KeyboardButton(key, Modifier.weight(1f), onClick = { onKeyPressed(key) })
                 }
             }
         }
     }
 }
-fun isValidForType(input: String, type: NumberType): Boolean {
-    if (input.isBlank()) return true // Empty input isn't an error
 
+fun isValidForType(input: String, type: NumberType): Boolean {
+    if (input.isBlank()) return true
     return try {
         when (type) {
-            NumberType.BINARY -> {
-                if (!input.all { it == '0' || it == '1' }) return false
-                input.toLong(2) // Checks if it's too big
-                true
-            }
-            NumberType.OCTAL -> {
-                if (!input.all { it in '0'..'7' }) return false
-                input.toLong(8) // Checks if it's too big
-                true
-            }
-            NumberType.DECIMAL -> {
-                if (!input.all { it.isDigit() }) return false
-                input.toLong() // Checks if it's too big
-                true
-            }
-            NumberType.HEXADECIMAL -> {
-                if (!input.all { it.isDigit() || it.uppercaseChar() in 'A'..'F' }) return false
-                input.toLong(16) // Checks if it's too big
-                true
-            }
-            NumberType.ROMAN -> {
-                // Strict Roman numeral check (also inherently limits it to 3999)
-                val romanRegex = Regex("^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$")
-                input.uppercase().matches(romanRegex)
-            }
+            NumberType.BINARY -> { if (!input.all { it == '0' || it == '1' }) return false; input.toLong(2); true }
+            NumberType.OCTAL -> { if (!input.all { it in '0'..'7' }) return false; input.toLong(8); true }
+            NumberType.DECIMAL -> { if (!input.all { it.isDigit() }) return false; input.toLong(); true }
+            NumberType.HEXADECIMAL -> { if (!input.all { it.isDigit() || it.uppercaseChar() in 'A'..'F' }) return false; input.toLong(16); true }
+            NumberType.ROMAN -> input.uppercase().matches(Regex("^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$"))
         }
-    } catch (_: Exception) {
-        // If toLong() fails because the number is too massive, we catch it here!
-        false
-    }
+    } catch (_: Exception) { false }
 }
