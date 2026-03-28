@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="appBgColor">#FF0E1B1E</color>
+    <color name="cardBgColor">#FF1E343C</color>
+    <color name="brightGreen">#FF2EF600</color>
+    <color name="lightGreen">#FF9AFF80</color>
+    <color name="paleGreen">#FFD6FDCA</color>
+
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFDFDFD</color>
+</resources>
