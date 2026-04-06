@@ -5,8 +5,9 @@ A simple, retro-terminal themed Android application that converts numbers betwee
 Built with **Jetpack Compose** and **MVVM**, this project demonstrates a clean, reactive UI seamlessly integrated with robust state management.
 
 ## Visuals
-
-![App Screenshot/GIF](Screenshot_2026_04_04_20_06_27_518_com_example_numbercomventer.jpg)
+<div align="center">
+  <img src="Screenshot_2026_04_04_20_06_27_518_com_example_numbercomventer.jpg" width="70%" alt="Retro Terminal App Screenshot">
+</div>
 
 ## Architecture Breakdown
 
