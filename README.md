@@ -6,7 +6,7 @@ Built with **Jetpack Compose** and **MVVM**, this project demonstrates a clean, 
 
 ## Visuals
 <div align="center">
-  <img src="Screenshot_2026_04_04_20_06_27_518_com_example_numbercomventer.jpg" width="70%" alt="Retro Terminal App Screenshot">
+  <img src="Screenshot_2026_04_04_20_06_27_518_com_example_numbercomventer.jpg" width="50%" alt="Retro Terminal App Screenshot">
 </div>
 
 ## Architecture Breakdown
